@@ -21,7 +21,7 @@ from tqdm import tqdm
 # -------------------------------
 # **技术指标配置**
 # -------------------------------
-@dataclass
+@dataclass # 用于自动为用户自定义的类添加生成的 特殊方法 例如 __init__() 和 __repr__()
 class TechnicalParams:
     """技术指标参数配置"""
     ma_periods: Dict[str, int]
@@ -93,11 +93,14 @@ class StockAnalyzer:
             df = ak.stock_zh_a_hist(
                 symbol=code,
                 start_date=start_date,
+                period="daily",
                 end_date=end_date,
                 adjust="qfq"
             )
 
             self.logger.info(f"获取到 {len(df)} 行数据，列名：{df.columns.tolist()}")
+
+            print(df)
 
             df = df.rename(columns={
                 "日期": "date",
@@ -108,15 +111,16 @@ class StockAnalyzer:
                 "成交量": "volume",
                 "trade_date": "date"
             })
-
+            print(set(df.columns), '8888')
             required_columns = {'date', 'open', 'close', 'high', 'low', 'volume'}
-            missing_columns = required_columns - set(df.columns)
+            missing_columns = required_columns - set(df.columns) # set去重
             if missing_columns:
                 raise ValueError(f"缺失必须字段: {missing_columns}")
 
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
             numeric_columns = ['open', 'close', 'high', 'low', 'volume']
             df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
+            # 去掉date为NaN的行数据
             df_cleaned = df.dropna(subset=['date'] + numeric_columns).sort_values('date')
 
             if len(df_cleaned) < 60:
@@ -127,10 +131,9 @@ class StockAnalyzer:
         except Exception as e:
             self.logger.error(f"获取股票数据失败，股票代码 {stock_code}，错误信息：{str(e)}")
             raise ValueError(f"股票 {stock_code} 数据获取出错: {str(e)}")
-
     @staticmethod
     def calculate_ema(series: pd.Series, period: int) -> pd.Series:
-        """计算 EMA"""
+        """计算 EMA(指数移动平均线)"""
         return series.ewm(span=period, adjust=False).mean()
 
     @staticmethod
@@ -200,6 +203,8 @@ class StockAnalyzer:
         """计算所有技术指标，并增加 OBV 和随机指标"""
         try:
             # 移动均线
+            # MA5: 过去5个交易日收盘价的平均值连线，反映短期价格趋势。
+            # MA5, MA20, MA60
             for key, period in self.params.ma_periods.items():
                 df[f'MA{period}'] = self.calculate_ema(df['close'], period)
             df['RSI'] = self.calculate_rsi(df['close'], self.params.rsi_period)
@@ -219,7 +224,7 @@ class StockAnalyzer:
 
             # 增加随机指标 Stochastic
             df['%K'], df['%D'] = self.calculate_stochastic(df['close'], window=14)
-
+            df.to_csv('D:/xszi\stock-scanner/scanner/finance2021.csv')
             return df
 
         except Exception as e:
@@ -431,16 +436,18 @@ class TopStockScanner:
             results = []
             total_batches = (total_stocks + batch_size - 1) // batch_size
 
-            for i in range(0, total_stocks, batch_size):
-                batch_number = i // batch_size + 1
-                print(f"\r当前进度: 批次 {batch_number}/{total_batches}", end="")
-                batch = all_stocks[i:i + batch_size]
-                batch_results = self.process_batch(batch)
-                results.extend(batch_results)
-                if i + batch_size < total_stocks:
-                    time.sleep(random.uniform(3, 5))
-                if results and ((len(results) % 100 == 0) or (i + batch_size >= total_stocks)):
-                    self.save_intermediate_results(results)
+            # for i in range(0, total_stocks, batch_size):
+            #     batch_number = i // batch_size + 1
+            #     print(f"\r当前进度: 批次 {batch_number}/{total_batches}", end="")
+            #     batch = all_stocks[i:i + batch_size]
+            #     batch_results = self.process_batch(batch)
+            #     results.extend(batch_results)
+            #     if i + batch_size < total_stocks:
+            #         time.sleep(random.uniform(3, 5))
+            #     if results and ((len(results) % 100 == 0) or (i + batch_size >= total_stocks)):
+            #         self.save_intermediate_results(results)
+            batch = all_stocks[0:1]
+            batch_results = self.process_batch(batch)
             print("\n扫描结束！")
 
             if results:
@@ -465,6 +472,7 @@ class TopStockScanner:
         except Exception as e:
             self.logger.error(f"全盘扫描失败：{str(e)}")
             raise
+
 
 # -------------------------------
 # **结果分组与报告生成**
