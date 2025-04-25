@@ -98,9 +98,21 @@ class StockAnalyzer:
                 adjust="qfq"
             )
 
-            self.logger.info(f"获取到 {len(df)} 行数据，列名：{df.columns.tolist()}")
+            # df_financial_abstract = ak.stock_financial_abstract(symbol=code)
 
-            print(df)
+            df_financial_analysis_indicator = ak.stock_financial_analysis_indicator(symbol=code, start_year="2024")
+            # 先过滤出所需要的表头数据
+            df_financial_analysis_indicator_clean = pd.DataFrame(df_financial_analysis_indicator, columns=['扣除非经常性损益后的净利润(元)', '流动比率', '1年以内应收帐款(元)'])
+
+            print(df_financial_analysis_indicator_clean, 'hhh')
+            print(df_financial_analysis_indicator.iloc[-1, 28], 'ppp')
+            print(df_financial_analysis_indicator.iloc[-1, 44], 'qqq')
+            # 获取净利润
+            df['net_profit'] = df_financial_analysis_indicator.iloc[-1, 2]
+            # 获取流动比率
+            df['net_current_ratio'] = df_financial_analysis_indicator.iloc[-1, 44]
+
+            self.logger.info(f"获取到 {len(df)} 行数据，列名：{df.columns.tolist()}")
 
             df = df.rename(columns={
                 "日期": "date",
@@ -111,14 +123,13 @@ class StockAnalyzer:
                 "成交量": "volume",
                 "trade_date": "date"
             })
-            print(set(df.columns), '8888')
-            required_columns = {'date', 'open', 'close', 'high', 'low', 'volume'}
+            required_columns = {'date', 'open', 'close', 'high', 'low', 'volume', 'net_profit', 'net_current_ratio'}
             missing_columns = required_columns - set(df.columns) # set去重
             if missing_columns:
                 raise ValueError(f"缺失必须字段: {missing_columns}")
 
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
-            numeric_columns = ['open', 'close', 'high', 'low', 'volume']
+            numeric_columns = ['open', 'close', 'high', 'low', 'volume', 'net_profit']
             df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
             # 去掉date为NaN的行数据
             df_cleaned = df.dropna(subset=['date'] + numeric_columns).sort_values('date')
@@ -126,6 +137,7 @@ class StockAnalyzer:
             if len(df_cleaned) < 60:
                 raise ValueError(f"数据不足（仅 {len(df_cleaned)} 行），无法计算至少60日均线")
 
+            print(df_cleaned, '666')
             return df_cleaned
 
         except Exception as e:
@@ -298,6 +310,12 @@ class StockAnalyzer:
         else:
             return '强烈建议卖出'
 
+    @staticmethod
+    def get_stock_profit_data(stock_code: str) -> str:
+        df_profit = ak.stock_financial_abstract(
+            symbol=stock_code
+        )
+        return df_profit[0, 2]
     def analyze_stock(self, stock_code: str) -> Dict:
         """针对单只股票执行完整的技术分析流程"""
         try:
@@ -446,7 +464,7 @@ class TopStockScanner:
             #         time.sleep(random.uniform(3, 5))
             #     if results and ((len(results) % 100 == 0) or (i + batch_size >= total_stocks)):
             #         self.save_intermediate_results(results)
-            batch = all_stocks[0:1]
+            batch = all_stocks[0:5]
             batch_results = self.process_batch(batch)
             print("\n扫描结束！")
 
